@@ -36,18 +36,17 @@ select_bairro <- df %>%
 # APP --------------------------------------------------------------------------
 
 ui <- page_navbar(
-  title = span(
-    img(
-      src = "Logo Prefeitura horizontal azul.png", 
-      height = "30px", 
-      style = "margin-right: 15px; vertical-align: middle;"
-    ),
-    "Monitoramento de Poluição Sonora"
-  ),
+  title = uiOutput("navbar_title"),
   theme = bs_theme(
     version = 5,
     primary = "#004a80",
     secondary = "#00a2da"
+  ),
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "style.css")
+  ),
+  tags$head(
+    tags$link(rel = "shortcut icon", href = "Logo.png")
   ),
   sidebar = sidebar(
     width = 320,
@@ -175,10 +174,32 @@ ui <- page_navbar(
       card(card_header("Volume por Subprefeitura"), plotlyOutput("sub_plot"), full_screen = TRUE),
       card(card_header("Volume por Área de Planejamento (AP)"), plotlyOutput("ap_plot"), full_screen = TRUE)
     )
+  ),
+  
+  nav_spacer(),
+  nav_item(
+    input_dark_mode(id = "dark_mode", mode = "light")
   )
 )
 
 server <- function(input, output, session) {
+  
+  output$navbar_title <- renderUI({
+    logo_src <- if (isTruthy(input$dark_mode) && input$dark_mode == "dark") {
+      "Logo Prefeitura horizontal branco.png"
+    } else {
+      "Logo Prefeitura horizontal azul.png"
+    }
+    
+    span(
+      img(
+        src = logo_src, 
+        height = "30px", 
+        style = "margin-right: 15px; vertical-align: middle;"
+      ),
+      "Monitoramento de Poluição Sonora"
+    )
+  })
   
   filtered_df <- reactive({
     df %>% 
@@ -202,24 +223,28 @@ server <- function(input, output, session) {
     scales::percent(nrow(filtered_df()) / nrow(df), accuracy = 0.2, decimal.mark = ",")
   })
   
+  is_dark <- reactive({
+    isTruthy(input$dark_mode) && input$dark_mode == "dark"
+  })
+  
   output$subtipo_plot <- renderPlotly({
-    create_bar_plot(filtered_df(), "no_subtipo", "Subtipo", 10) 
+    create_bar_plot(filtered_df(), "no_subtipo", "Subtipo", 10, dark = is_dark()) 
   })
   
   output$bairro_plot <- renderPlotly({
-    create_bar_plot(filtered_df(), "no_bairro", "Bairro", 15)
+    create_bar_plot(filtered_df(), "no_bairro", "Bairro", 15, dark = is_dark())
   })
   
   output$ra_plot <- renderPlotly({
-    create_bar_plot(filtered_df(), "no_regiao_administrativa", "RA", 15)
+    create_bar_plot(filtered_df(), "no_regiao_administrativa", "RA", 15, dark = is_dark())
   })
   
   output$sub_plot <- renderPlotly({
-    create_bar_plot(filtered_df(), "no_subprefeitura", "Subprefeitura", 0)
+    create_bar_plot(filtered_df(), "no_subprefeitura", "Subprefeitura", 0, dark = is_dark())
   })
   
   output$ap_plot <- renderPlotly({
-    create_bar_plot(filtered_df(), "no_area_planejamento", "AP", 0)
+    create_bar_plot(filtered_df(), "no_area_planejamento", "AP", 0, dark = is_dark())
   })
   
   output$mapa_chamados <- renderLeaflet({
@@ -228,12 +253,14 @@ server <- function(input, output, session) {
     map_data <- filtered_df() %>% 
       filter(!is.na(lat) & !is.na(lng))
     
+    map_tile <- if(is_dark()) providers$CartoDB.DarkMatter else providers$CartoDB.Positron
+    
     if(nrow(map_data) == 0) {
-      return(leaflet() %>% addProviderTiles(providers$CartoDB.Positron) %>% setView(lng = -43.1729, lat = -22.9068, zoom = 11))
+      return(leaflet() %>% addProviderTiles(map_tile) %>% setView(lng = -43.1729, lat = -22.9068, zoom = 11))
     }
     
     leaflet(map_data) %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
+      addProviderTiles(map_tile) %>%
       addCircleMarkers(
         ~lng, 
         ~lat, 

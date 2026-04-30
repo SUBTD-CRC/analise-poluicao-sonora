@@ -1,0 +1,82 @@
+body,
+.card,
+.navbar,
+.sidebar {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}
+
+.bslib-dark-mode-switch {
+  margin-left: 10px;
+}
+
+[data-bs-theme='dark'] {
+  --bs-body-bg: #121212;
+  --bs-card-bg: #1e1e1e;
+  --bs-tertiary-bg: #1e1e1e;
+  --bs-border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-bs-theme='dark'] .card,
+[data-bs-theme='dark'] .bslib-card,
+[data-bs-theme='dark'] .bslib-value-box {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.bslib-value-box {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+[data-bs-theme='dark'] .vscomp-wrapper,
+[data-bs-theme='dark'] .vscomp-wrapper .vscomp-toggle-button,
+[data-bs-theme='dark'] .vscomp-dropbox,
+[data-bs-theme='dark'] .vscomp-dropbox-container,
+[data-bs-theme='dark'] .vscomp-search-container,
+[data-bs-theme='dark'] .vscomp-option {
+  background-color: #2b3035 !important;
+  color: #ffffff !important;
+  --vs-background-color: #2b3035 !important;
+  --vs-text-color: #ffffff !important;
+  --vs-border-color: #495057 !important;
+  --vs-dropdown-background-color: #2b3035 !important;
+  --vs-dropdown-option-hover-background-color: #3d4246 !important;
+}
+
+[data-bs-theme='dark'] .vscomp-search-input {
+  background-color: transparent !important;
+  color: #ffffff !important;
+  border-bottom: 1px solid #495057 !important;
+}
+
+[data-bs-theme='dark'] .vscomp-option.reorder-active,
+[data-bs-theme='dark'] .vscomp-option.focused {
+  background-color: #3d4246 !important;
+}
+
+[data-bs-theme='dark'] .form-control,
+[data-bs-theme='dark'] .input-group-text,
+[data-bs-theme='dark'] .selectize-input,
+[data-bs-theme='dark'] .selectize-dropdown,
+[data-bs-theme='dark'] .selectize-input input {
+  background-color: #2b3035 !important;
+  color: #ffffff !important;
+  border-color: #495057 !important;
+}
+
+[data-bs-theme='dark'] .datepicker,
+[data-bs-theme='dark'] .datepicker-dropdown {
+  background-color: #2b3035 !important;
+  color: #ffffff !important;
+  border: 1px solid #495057 !important;
+}
+
+[data-bs-theme='dark'] .datepicker table tr td.day:hover,
+[data-bs-theme='dark'] .datepicker table tr td.day.focused {
+  background-color: #3d4246 !important;
+}
+
+[data-bs-theme='dark'] .datepicker table tr td.old,
+[data-bs-theme='dark'] .datepicker table tr td.new {
+  color: #777777 !important;
+}
