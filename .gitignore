@@ -1,0 +1,10 @@
+Extração*.xlsx
+.Renviron
+.env
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Rproj
+Thumbs.db
+.DS_Store
