@@ -37,6 +37,7 @@ select_bairro <- df %>%
 
 ui <- page_navbar(
   title = uiOutput("navbar_title"),
+  fillable = FALSE,
   theme = bs_theme(
     version = 5,
     primary = "#004a80",
@@ -120,6 +121,7 @@ ui <- page_navbar(
   nav_panel(
     title = "Visão Geral",
     icon = bs_icon("graph-up"),
+    fillable = FALSE,
     
     layout_column_wrap(
       width = 1/3, 
@@ -146,6 +148,7 @@ ui <- page_navbar(
     
     layout_columns(
       col_widths = c(7, 5),
+      fill = FALSE,
       card(
         card_header("Localização dos Chamados"),
         leafletOutput("mapa_chamados", height = "550px"),
@@ -156,12 +159,28 @@ ui <- page_navbar(
         plotlyOutput("subtipo_plot", height = "550px"),
         full_screen = TRUE
       )
+    ),
+    
+    layout_columns(
+      col_widths = c(6, 6),
+      fill = FALSE,
+      card(
+        card_header("Distribuição por Status"),
+        plotlyOutput("status_pie", height = "450px"),
+        full_screen = TRUE
+      ),
+      card(
+        card_header("Volume por Categoria"),
+        plotlyOutput("categoria_treemap", height = "450px"),
+        full_screen = TRUE
+      )
     )
   ),
   
   nav_panel(
     title = "Análise Territorial",
     icon = bs_icon("geo-alt"),
+    fillable = FALSE,
     
     layout_columns(
       col_widths = c(6, 6),
@@ -247,23 +266,51 @@ server <- function(input, output, session) {
     create_bar_plot(filtered_df(), "no_area_planejamento", "AP", 0, dark = is_dark())
   })
   
+  output$status_pie <- renderPlotly({
+    create_pie_chart(filtered_df(), "no_status", dark = is_dark())
+  })
+  
+  output$categoria_treemap <- renderPlotly({
+    create_single_stacked_bar(filtered_df(), "no_categoria", dark = is_dark())
+  })
+  
   output$mapa_chamados <- renderLeaflet({
     req(filtered_df())
     
-    map_data <- filtered_df() %>% 
+    df_filtered <- filtered_df()
+    total_calls <- nrow(df_filtered)
+    map_data <- df_filtered %>% 
       filter(!is.na(lat) & !is.na(lng))
+    
+    calls_with_coords <- nrow(map_data)
+    percent_coords <- if(total_calls > 0) {
+      scales::percent(calls_with_coords / total_calls, accuracy = 0.1, decimal.mark = ",")
+    } else {
+      "0%"
+    }
     
     map_tile <- if(is_dark()) providers$CartoDB.DarkMatter else providers$CartoDB.Positron
     
+    l <- leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+      addProviderTiles(map_tile) %>%
+      addControl(
+        html = HTML(paste0(
+            "<span>📍</span> ",
+            "<span>", percent_coords, " mapeados</span>"
+          )),
+        position = "topright",
+        className = "leaflet-control map-stats-control"
+      )
+    
     if(nrow(map_data) == 0) {
-      return(leaflet() %>% addProviderTiles(map_tile) %>% setView(lng = -43.1729, lat = -22.9068, zoom = 11))
+      return(l %>% setView(lng = -43.1729, lat = -22.9068, zoom = 11))
     }
     
-    leaflet(map_data) %>%
-      addProviderTiles(map_tile) %>%
+    l %>%
       addCircleMarkers(
-        ~lng, 
-        ~lat, 
+        data = map_data,
+        lng = ~lng, 
+        lat = ~lat, 
         radius = 5, 
         color = "#004a80", 
         fillColor = "#00a2da",

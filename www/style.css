@@ -80,3 +80,26 @@ body,
 [data-bs-theme='dark'] .datepicker table tr td.new {
   color: #777777 !important;
 }
+
+.map-stats-control {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #004a80 !important;
+  padding: 10px 15px !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid #e0e0e0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  white-space: nowrap !important;
+  margin: 10px !important;
+  pointer-events: auto;
+}
+
+[data-bs-theme='dark'] .map-stats-control {
+  background: rgba(33, 37, 41, 0.9) !important;
+  color: #ffffff !important;
+  border-color: #444444 !important;
+}
