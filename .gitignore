@@ -1,4 +1,5 @@
 Extração*.xlsx
+Extração*.rds
 .Renviron
 .env
 .Rproj.user
@@ -9,3 +10,4 @@ Extração*.xlsx
 Thumbs.db
 .DS_Store
 rsconnect/
+cache/
