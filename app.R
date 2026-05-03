@@ -1,6 +1,6 @@
 # Config -----------------------------------------------------------------------
 
-# shinyOptions(cache = cachem::cache_disk("./cache"))
+shinyOptions(cache = cachem::cache_disk("./cache"))
 
 library(shiny)
 library(bslib)
