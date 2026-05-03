@@ -20,7 +20,8 @@ create_bar_plot <- function(data, col, title_name, head_n = 15, dark = FALSE) {
     type = "bar",
     orientation = 'h',
     marker = list(color = "#004a80"),
-    text = ~n, textposition = 'auto',
+    texttemplate = "%{x:,.0f}", 
+    textposition = 'auto',
     textfont = list(color = "#ffffff")
   ) %>%
     layout(
@@ -92,8 +93,9 @@ create_single_stacked_bar <- function(data, col, dark = FALSE) {
     type = 'bar',
     orientation = 'h',
     colors = "Blues",
-    text = ~paste0(get(col), ": ", n),
-    hoverinfo = "text"
+    texttemplate = "%{x:,.0f}",
+    text = ~get(col),
+    hoverinfo = "text+x"
   ) %>%
     layout(
       barmode = 'stack',
@@ -119,7 +121,6 @@ create_single_stacked_bar <- function(data, col, dark = FALSE) {
 
 create_time_series_plot <- function(data, date_col, granularity = "Automático", dark = FALSE) {
   if (is.null(data) || nrow(data) == 0 || !(date_col %in% colnames(data))) return(NULL)
-  
   data[[date_col]] <- as.Date(data[[date_col]])
   
   if (granularity == "Automático") {
@@ -199,6 +200,141 @@ create_time_series_plot <- function(data, date_col, granularity = "Automático",
       plot_bgcolor = 'rgba(0,0,0,0)',
       margin = list(l = 50, r = 20, t = 20, b = 50),
       hovermode = "x unified"
+    ) %>%
+    config(displayModeBar = FALSE)
+}
+
+create_heatmap_plot <- function(data, date_col, dark = FALSE) {
+  if (is.null(data) || nrow(data) == 0 || !(date_col %in% colnames(data))) return(NULL)
+  
+  plot_data <- data %>%
+    mutate(
+      hora = lubridate::hour(!!sym(date_col)),
+      dia_semana = lubridate::wday(!!sym(date_col), label = TRUE, abbr = FALSE, week_start = 1)
+    ) %>%
+    group_by(dia_semana, hora) %>%
+    summarise(n = n(), .groups = "drop")
+  
+  all_hours <- 0:23
+  all_days <- levels(plot_data$dia_semana)
+  
+  grid <- expand.grid(
+    dia_semana = factor(all_days, levels = all_days, ordered = TRUE), 
+    hora = all_hours
+  )
+  
+  plot_data <- grid %>%
+    left_join(plot_data, by = c("dia_semana", "hora")) %>%
+    mutate(n = ifelse(is.na(n), 0, n))
+  
+  text_color <- if(dark) "#ffffff" else "#212529"
+  
+  matrix_data <- plot_data %>%
+    tidyr::pivot_wider(names_from = hora, values_from = n) %>%
+    as.data.frame()
+  
+  row.names(matrix_data) <- matrix_data$dia_semana
+  matrix_data <- matrix_data[, -1]
+  
+  plot_ly(
+    x = colnames(matrix_data),
+    y = rownames(matrix_data),
+    z = as.matrix(matrix_data),
+    type = "heatmap",
+    colorscale = "Blues",
+    reversescale = TRUE,
+    xgap = 1,
+    ygap = 1,
+    hovertemplate = "<b>Dia:</b> %{y}<br><b>Hora:</b> %{x}h<br><b>Chamados:</b> %{z}<extra></extra>"
+  ) %>%
+    layout(
+      xaxis = list(
+        title = "Hora do Dia",
+        tickfont = list(color = text_color),
+        dtick = 2
+      ),
+      yaxis = list(
+        title = "",
+        tickfont = list(color = text_color),
+        autorange = "reversed"
+      ),
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      font = list(color = text_color),
+      margin = list(l = 100, r = 20, t = 20, b = 50)
+    ) %>%
+    config(displayModeBar = FALSE)
+}
+
+create_sla_plot <- function(data, group_col, dark = FALSE) {
+  if (is.null(data) || nrow(data) == 0 || !(group_col %in% colnames(data))) return(NULL)
+  
+  df_base <- data %>%
+    mutate(
+      status_sla = case_when(
+        str_detect(prazo, "no prazo") ~ "No Prazo",
+        str_detect(prazo, "fora do prazo") ~ "Fora do Prazo",
+        TRUE ~ "Sem Alvo"
+      )
+    ) %>%
+    filter(str_detect(prazo, "no prazo|fora do prazo"))
+  
+  plot_data <- df_base %>%
+    group_by(!!sym(group_col), status_sla) %>%
+    summarise(n = n(), .groups = "drop_last") %>%
+    mutate(perc = n / sum(n)) %>%
+    ungroup() %>%
+    group_by(!!sym(group_col)) %>%
+    mutate(ordem_sla = sum(perc[status_sla == "No Prazo"], na.rm = TRUE)) %>%
+    ungroup()
+  
+  total_cidade <- df_base %>%
+    group_by(status_sla) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    mutate(
+      !!sym(group_col) := "<b>TOTAL</b>",
+      perc = n / sum(n),
+      ordem_sla = 2
+    )
+  
+  plot_data <- bind_rows(plot_data, total_cidade)
+  
+  plot_data[[group_col]] <- reorder(as.factor(plot_data[[group_col]]), plot_data$ordem_sla)
+  
+  sla_colors <- c("No Prazo" = "#004a80", "Fora do Prazo" = "#dc3545")
+  text_color <- if(dark) "#ffffff" else "#212529"
+  
+  plot_ly(
+    data = plot_data,
+    x = ~perc,
+    y = as.formula(paste0("~", group_col)),
+    color = ~status_sla,
+    type = 'bar',
+    orientation = 'h',
+    colors = sla_colors,
+    text = ~scales::percent(perc, accuracy = 0.1),
+    textposition = 'auto',
+    hovertemplate = paste0("<b>%{y}</b><br>Status: %{fullData.name}<br>Qtd: %{customdata:,.0f}<br>Perc: %{x:.1%}<extra></extra>"),
+    customdata = ~n
+  ) %>%
+    layout(
+      barmode = 'stack',
+      separators = ",.",
+      xaxis = list(
+        title = "Percentual",
+        tickformat = ".0%",
+        tickfont = list(color = text_color),
+        gridcolor = if(dark) "#444444" else "#eeeeee"
+      ),
+      yaxis = list(
+        title = "",
+        tickfont = list(color = text_color)
+      ),
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      font = list(color = text_color),
+      legend = list(orientation = 'h', x = 0, y = -0.1),
+      margin = list(l = 180, r = 20, t = 20, b = 50)
     ) %>%
     config(displayModeBar = FALSE)
 }

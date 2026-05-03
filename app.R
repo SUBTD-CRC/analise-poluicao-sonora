@@ -1,6 +1,6 @@
 # Config -----------------------------------------------------------------------
 
-shinyOptions(cache = cachem::cache_disk("./cache"))
+# shinyOptions(cache = cachem::cache_disk("./cache"))
 
 library(shiny)
 library(bslib)
@@ -13,6 +13,7 @@ library(stringr)
 library(bsicons)
 library(shinyWidgets)
 library(sf)
+library(tidyr)
 
 # Data -------------------------------------------------------------------------
 
@@ -47,28 +48,25 @@ select_bairro <- df %>%
 
 # GEO --------------------------------------------------------------------------
 
-# Carregar e limpar GeoJSON
 geojson_path <- "data/Limite_de_Bairros.geojson"
-bairros_sf <- st_read(geojson_path, quiet = TRUE) %>%
-  mutate(nome = str_trim(nome))
+bairros_sf <- st_read(geojson_path, quiet = TRUE) %>% 
+  select(codbnum)
 
-# Mapeamento Territorial do DF para o GeoJSON
 territorial_map <- df %>%
-  select(no_bairro, no_subprefeitura, no_regiao_administrativa, no_area_planejamento) %>%
+  select(id_bairro, no_bairro, no_subprefeitura, no_area_planejamento, no_regiao_administrativa, cod_ra, no_gerencia_executiva_local) %>%
   distinct()
 
 bairros_sf <- bairros_sf %>%
-  left_join(territorial_map, by = c("nome" = "no_bairro"))
+  left_join(territorial_map, by = c("codbnum" = "id_bairro"))
 
-# Pré-agregar geometrias para performance (Dissolve)
-message("Pré-agregando geometrias territoriais...")
 agg_geos <- list(
-  "Bairro" = bairros_sf %>% select(unit = nome),
+  "Bairro" = bairros_sf %>% select(unit = no_bairro),
   "Subprefeitura" = bairros_sf %>% filter(!is.na(no_subprefeitura)) %>% group_by(unit = no_subprefeitura) %>% summarise(.groups = "drop"),
   "Região Administrativa" = bairros_sf %>% filter(!is.na(no_regiao_administrativa)) %>% group_by(unit = no_regiao_administrativa) %>% summarise(.groups = "drop"),
   "AP" = bairros_sf %>% filter(!is.na(no_area_planejamento)) %>% group_by(unit = no_area_planejamento) %>% summarise(.groups = "drop")
 )
-message("Pronto!")
+
+latest_update <- max(df$dt_inicio, na.rm = TRUE) %>% format("%d/%m/%Y")
 
 # APP --------------------------------------------------------------------------
 
@@ -154,6 +152,12 @@ ui <- page_navbar(
       allOptionsSelectedText = "Todas as opções",
       selectAllText = "Selecionar Tudo"
     ),
+    hr(),
+    div(
+      style = "font-size: 0.85rem; color: var(--bs-secondary-color); text-align: center; margin-top: auto; padding-bottom: 10px;",
+      bs_icon("clock-history"),
+      span(paste0(" Dados atualizados até: ", latest_update))
+    )
   ),
   
   nav_panel(
@@ -165,21 +169,21 @@ ui <- page_navbar(
       width = 1/3, 
       fill = FALSE,
       value_box(
-        title = "Total Geral", 
+        title = "Base Histórica", 
         value = textOutput("total_geral"), 
-        showcase = bs_icon("megaphone"), 
+        showcase = bs_icon("database"), 
         theme = "primary"
       ),
       value_box(
-        title = "Qtd. de Chamados", 
+        title = "Chamados Filtrados", 
         value = textOutput("qtd_chamado"), 
-        showcase = bs_icon("tag"), 
+        showcase = bs_icon("funnel"), 
         theme = "primary"
       ),
       value_box(
-        title = "Percentual", 
-        value = textOutput("percentual"), 
-        showcase = bs_icon("check2-circle"), 
+        title = "Eficiência de SLA", 
+        value = textOutput("percentual_sla"), 
+        showcase = bs_icon("speedometer2"), 
         theme = "primary"
       )
     ),
@@ -207,8 +211,13 @@ ui <- page_navbar(
     ),
     
     layout_columns(
-      col_widths = 12,
+      col_widths = c(6 ,6),
       fill = FALSE,
+      card(
+        card_header("Distribuição Temporal (Hora x Dia)"),
+        plotlyOutput("heatmap_plot", height = "400px"),
+        full_screen = TRUE
+      ),
       card(
         card_header("Volume por Subtipo"),
         plotlyOutput("subtipo_plot", height = "550px"),
@@ -229,6 +238,16 @@ ui <- page_navbar(
         plotlyOutput("categoria_treemap", height = "450px"),
         full_screen = TRUE
       )
+    ),
+    
+    layout_columns(
+      col_widths = 12,
+      fill = FALSE,
+      card(
+        card_header("Performance de SLA por Subprefeitura"),
+        plotlyOutput("sla_plot", height = "500px"),
+        full_screen = TRUE
+      )
     )
   ),
   
@@ -236,6 +255,29 @@ ui <- page_navbar(
     title = "Análise Territorial",
     icon = bs_icon("geo-alt"),
     fillable = FALSE,
+    
+    layout_column_wrap(
+      width = 1/3, 
+      fill = FALSE,
+      value_box(
+        title = "Base Histórica", 
+        value = textOutput("total_geral_geo"), 
+        showcase = bs_icon("database"), 
+        theme = "primary"
+      ),
+      value_box(
+        title = "Chamados Filtrados", 
+        value = textOutput("qtd_chamado_geo"), 
+        showcase = bs_icon("funnel"), 
+        theme = "primary"
+      ),
+      value_box(
+        title = "Eficiência de SLA", 
+        value = textOutput("percentual_sla_geo"), 
+        showcase = bs_icon("speedometer2"), 
+        theme = "primary"
+      )
+    ),
     
     layout_columns(
       col_widths = 12,
@@ -273,7 +315,7 @@ ui <- page_navbar(
     layout_columns(
       col_widths = c(6, 6),
       card(card_header("Volume por Bairro (Top 15)"), plotlyOutput("bairro_plot"), full_screen = TRUE),
-      card(card_header("Volume por Região Administrativa"), plotlyOutput("ra_plot"), full_screen = TRUE)
+      card(card_header("Volume por Região Administrativa (Top 15)"), plotlyOutput("ra_plot"), full_screen = TRUE)
     ),
     
     layout_columns(
@@ -321,10 +363,15 @@ server <- function(input, output, session) {
   })
   
   filtered_df <- reactive({
+    req(input$date_range)
+    
+    start_dt <- as.POSIXct(paste(input$date_range[1], "00:00:00"))
+    end_dt <- as.POSIXct(paste(input$date_range[2], "23:59:59"))
+    
     df %>% 
       filter(
-        dt_inicio >= input$date_range[1] & 
-        dt_inicio <= input$date_range[2] &
+        dt_inicio >= start_dt & 
+        dt_inicio <= end_dt &
         id_bairro %in% input$bairro_filter & 
         no_status %in% input$status_filter &
         no_subtipo %in% input$subtipo_filter &
@@ -340,8 +387,30 @@ server <- function(input, output, session) {
     format(nrow(filtered_df()), big.mark = ".")
   })
   
-  output$percentual <- renderText({
-    scales::percent(nrow(filtered_df()) / nrow(df), accuracy = 0.2, decimal.mark = ",")
+  output$percentual_sla <- renderText({
+    req(filtered_df())
+    df_sla <- filtered_df() %>% 
+      filter(str_detect(prazo, "no prazo|fora do prazo"))
+    
+    if(nrow(df_sla) == 0) return("N/A")
+    
+    n_no_prazo <- sum(str_detect(df_sla$prazo, "no prazo"), na.rm = TRUE)
+    scales::percent(n_no_prazo / nrow(df_sla), accuracy = 0.1, decimal.mark = ",")
+  })
+
+  output$total_geral_geo <- renderText({ format(nrow(df), big.mark = ".") })
+  
+  output$qtd_chamado_geo <- renderText({ format(nrow(filtered_df()), big.mark = ".") })
+  
+  output$percentual_sla_geo <- renderText({
+    req(filtered_df())
+    df_sla <- filtered_df() %>% 
+      filter(str_detect(prazo, "no prazo|fora do prazo"))
+    
+    if(nrow(df_sla) == 0) return("N/A")
+    
+    n_no_prazo <- sum(str_detect(df_sla$prazo, "no prazo"), na.rm = TRUE)
+    scales::percent(n_no_prazo / nrow(df_sla), accuracy = 0.1, decimal.mark = ",")
   })
   
   output$time_series_plot <- renderPlotly({
@@ -349,8 +418,17 @@ server <- function(input, output, session) {
   }) %>% 
     bindCache(common_cache_keys(), input$time_granularity)
   
+  output$heatmap_plot <- renderPlotly({
+    create_heatmap_plot(filtered_df(), "dt_inicio", dark = is_dark())
+  }) %>% 
+    bindCache(common_cache_keys())
+    
+  output$sla_plot <- renderPlotly({
+    create_sla_plot(filtered_df(), "no_subprefeitura", dark = is_dark())
+  }) %>% 
+    bindCache(common_cache_keys())
+    
   is_dark <- reactive({
-
     isTruthy(input$dark_mode) && input$dark_mode == "dark"
   })
   

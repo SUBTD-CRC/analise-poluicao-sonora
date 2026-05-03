@@ -46,10 +46,7 @@ WITH tb_consulta AS(
   tb_categoria.no_categoria,
   tb_chamado.ds_chamado,
   tb_bairro.id_bairro,
-  tb_bairro.no_bairro,
   tb_logradouro.no_logradouro,
-  tb_territorialidade.no_area_planejamento,
-  tb_territorialidade_regiao_administrativa.no_regiao_administrativa,
   st_coordenada.nu_coord_x,
   st_coordenada.nu_coord_Y,
   tb_classificacao_chamado.id_classificacao_chamado,
@@ -66,9 +63,6 @@ WITH tb_consulta AS(
   LEFT JOIN tb_bairro ON tb_bairro_logradouro.id_bairro_fk = tb_bairro.id_bairro
   LEFT JOIN tb_logradouro ON tb_bairro_logradouro.id_logradouro_fk = tb_logradouro.id_logradouro
   LEFT JOIN tb_andamento ON tb_chamado.id_chamado = tb_andamento.id_chamado_fk
-  LEFT JOIN tb_territorialidade_regiao_administrativa_bairro ON tb_bairro.id_bairro = tb_territorialidade_regiao_administrativa_bairro.id_bairro_fk
-  LEFT JOIN tb_territorialidade_regiao_administrativa ON tb_territorialidade_regiao_administrativa_bairro.id_territorialidade_regiao_administrativa_fk = tb_territorialidade_regiao_administrativa.id_territorialidade_regiao_administrativa
-  LEFT JOIN tb_territorialidade ON tb_territorialidade_regiao_administrativa.id_territorialidade_fk = tb_territorialidade.id_territorialidade
   LEFT JOIN tb_chamado_sla ON tb_chamado.id_chamado = tb_chamado_sla.id_chamado_fk
   LEFT JOIN tb_responsavel_chamado ON tb_chamado.id_responsavel_chamado_fk = tb_responsavel_chamado.id_responsavel_chamado
   LEFT JOIN tb_unidade_organizacional ON tb_responsavel_chamado.id_unidade_organizacional_fk = tb_unidade_organizacional.id_unidade_organizacional
@@ -136,10 +130,9 @@ consulta_tratamento <- consulta %>%
   relocate(situacao, .after = no_status) %>% 
   select(-c(fl_encerramento, id_classificacao_chamado, id_andamento))  %>%
   mutate(across(where(is.character), ~ str_sub(.x, 1, 32766))) %>% 
-  left_join(readxl::read_xlsx("data/subprefeituras.xlsx") %>% select(id_bairro, no_subprefeitura), by = "id_bairro") %>% 
+  left_join(readxl::read_xlsx("data/territorio.xlsx"), by = "id_bairro") %>% 
   mutate(
-    across(c(no_subprefeitura, no_bairro), ~tidyr::replace_na(., "Ausente")),
-    no_bairro = if_else(no_bairro == "NULL", "Ausente", no_bairro),
+    across(c(no_subprefeitura, no_bairro, no_area_planejamento, no_regiao_administrativa, cod_ra, no_gerencia_executiva_local), ~tidyr::replace_na(., "Ausente")),
     id_bairro = if_else(is.na(id_bairro), 0, id_bairro)
   )
 
