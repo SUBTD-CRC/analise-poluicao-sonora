@@ -88,7 +88,6 @@ SELECT *
 WHERE 1=1
   AND id_subtipo IN (", id_subtipo, ")
   AND (no_categoria = 'Serviço' OR fl_ouvidoria = 1)
-  AND dt_inicio BETWEEN '2025-12-01 00:00:00.000' AND '2025-12-31 23:59:59.000'
 ")
 
 tic()

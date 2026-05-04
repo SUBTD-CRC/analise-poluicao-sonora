@@ -91,7 +91,7 @@ ui <- page_navbar(
     dateRangeInput(
       inputId = "date_range", 
       label = "Período:",
-      start = as.Date("2019-01-01"),
+      start = min(df$dt_inicio, na.rm = TRUE),
       end = max(df$dt_inicio, na.rm = TRUE),
       language = "pt-BR", 
       separator = " até "
@@ -181,7 +181,7 @@ ui <- page_navbar(
         theme = "primary"
       ),
       value_box(
-        title = "Eficiência de SLA", 
+        title = "Fechado no prazo", 
         value = textOutput("percentual_sla"), 
         showcase = bs_icon("speedometer2"), 
         theme = "primary"
@@ -244,7 +244,7 @@ ui <- page_navbar(
       col_widths = 12,
       fill = FALSE,
       card(
-        card_header("Performance de SLA por Subprefeitura"),
+        card_header("Fechamento no Prazo/Fora do prazo"),
         plotlyOutput("sla_plot", height = "500px"),
         full_screen = TRUE
       )
