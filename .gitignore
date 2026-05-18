@@ -1,5 +1,6 @@
 Extração*.xlsx
 Extração*.rds
+Extração*.parquet
 .Renviron
 .env
 .Rproj.user

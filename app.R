@@ -14,21 +14,30 @@ library(bsicons)
 library(shinyWidgets)
 library(sf)
 library(tidyr)
+library(arrow)
+library(writexl)
 
 # Data -------------------------------------------------------------------------
 
 tictoc::tic("Carregamento de Dados")
+
 data_files <- list.files("data", pattern = "Extração.*\\.xlsx", full.names = TRUE)
 if (length(data_files) == 0) {stop("Nenhum arquivo de dados encontrado.")}
+
 latest_file <- data_files[order(file.info(data_files)$mtime, decreasing = TRUE)][1]
 
-rds_file <- file.path("data", paste0(tools::file_path_sans_ext(basename(latest_file)), ".rds"))
-if (file.exists(rds_file) && file.info(rds_file)$mtime >= file.info(latest_file)$mtime) {
-  df <- readRDS(rds_file)
+parquet_file <- file.path("data", paste0(tools::file_path_sans_ext(basename(latest_file)), ".parquet"))
+
+if (file.exists(parquet_file) && file.info(parquet_file)$mtime >= file.info(latest_file)$mtime) {
+  df <- arrow::read_parquet(parquet_file)
 } else {
-  df <- read_excel(latest_file)
-  saveRDS(df, rds_file)
+  df <- readxl::read_excel(latest_file)
+  arrow::write_parquet(df, parquet_file)
 }
+
+df <- df %>%
+  mutate(across(starts_with("dt_"), ~ ymd_hms(.x)))
+
 tictoc::toc()
 
 # Choices/Selected -------------------------------------------------------------
@@ -94,7 +103,8 @@ ui <- page_navbar(
       start = min(df$dt_inicio, na.rm = TRUE),
       end = max(df$dt_inicio, na.rm = TRUE),
       language = "pt-BR", 
-      separator = " até "
+      separator = " até ",
+      format = "dd/mm/yyyy"
     ),
     virtualSelectInput(
       inputId = "subtipo_filter", 
@@ -151,6 +161,29 @@ ui <- page_navbar(
       optionsSelectedText = "opções escolhidas",
       allOptionsSelectedText = "Todas as opções",
       selectAllText = "Selecionar Tudo"
+    ),
+    virtualSelectInput(
+      inputId = "classe_filter", 
+      label = "Classe:", 
+      choices = sort(unique(df$ds_classe)),
+      selected = sort(unique(df$ds_classe)),
+      showValueAsTags = FALSE,
+      search = TRUE,
+      multiple = TRUE,
+      searchPlaceholderText = "Buscar",
+      placeholder = "Nenhuma opção selecionada",
+      optionsSelectedText = "opções escolhidas",
+      allOptionsSelectedText = "Todas as opções",
+      selectAllText = "Selecionar Tudo"
+    ),
+    div(
+      style = "margin-top: 20px;",
+      downloadButton(
+        outputId = "download_data", 
+        label = "Baixar Excel", 
+        class = "btn-primary w-100",
+        icon = icon("file-excel")
+      )
     ),
     hr(),
     div(
@@ -226,7 +259,7 @@ ui <- page_navbar(
     ),
     
     layout_columns(
-      col_widths = c(6, 6),
+      col_widths = c(4, 4, 4),
       fill = FALSE,
       card(
         card_header("Distribuição por Status"),
@@ -236,6 +269,11 @@ ui <- page_navbar(
       card(
         card_header("Volume por Categoria"),
         plotlyOutput("categoria_treemap", height = "450px"),
+        full_screen = TRUE
+      ),
+      card(
+        card_header("Distribuição por Classe"),
+        plotlyOutput("classe_plot", height = "450px"),
         full_screen = TRUE
       )
     ),
@@ -340,6 +378,7 @@ server <- function(input, output, session) {
       input$status_filter,
       input$subtipo_filter,
       input$categoria_filter,
+      input$classe_filter,
       input$map_mode,
       input$map_agg,
       is_dark()
@@ -375,9 +414,19 @@ server <- function(input, output, session) {
         id_bairro %in% input$bairro_filter & 
         no_status %in% input$status_filter &
         no_subtipo %in% input$subtipo_filter &
-        no_categoria %in% input$categoria_filter
+        no_categoria %in% input$categoria_filter &
+        ds_classe %in% input$classe_filter
       )
   })
+  
+  output$download_data <- downloadHandler(
+    filename = function() {
+      paste0("dados_poluicao_sonora_", format(Sys.time(), "%Y-%m-%d"), ".xlsx")
+    },
+    content = function(file) {
+      writexl::write_xlsx(filtered_df(), path = file)
+    }
+  )
   
   output$total_geral <- renderText({
     format(nrow(df), big.mark = ".")
@@ -464,6 +513,11 @@ server <- function(input, output, session) {
   
   output$categoria_treemap <- renderPlotly({
     create_single_stacked_bar(filtered_df(), "no_categoria", dark = is_dark())
+  }) %>% 
+    bindCache(common_cache_keys())
+  
+  output$classe_plot <- renderPlotly({
+    create_vertical_bar_percentage(filtered_df(), "ds_classe", dark = is_dark())
   }) %>% 
     bindCache(common_cache_keys())
   

@@ -338,3 +338,46 @@ create_sla_plot <- function(data, group_col, dark = FALSE) {
     ) %>%
     config(displayModeBar = FALSE)
 }
+
+create_vertical_bar_percentage <- function(data, col, dark = FALSE) {
+  if (is.null(data) || nrow(data) == 0 || !(col %in% colnames(data))) return(NULL)
+  
+  plot_data <- data %>%
+    count(!!sym(col)) %>%
+    mutate(perc = n / sum(n)) %>%
+    arrange(desc(n))
+  
+  text_color <- if(dark) "#ffffff" else "#212529"
+  grid_color <- if(dark) "#444444" else "#eeeeee"
+  
+  plot_ly(
+    data = plot_data,
+    x = ~reorder(get(col), -n),
+    y = ~perc,
+    type = "bar",
+    marker = list(color = "#004a80"),
+    text = ~scales::percent(perc, accuracy = 0.1, decimal.mark = ","),
+    textposition = 'auto',
+    textfont = list(color = "#ffffff"),
+    hovertemplate = paste0("<b>%{x}</b><br>Qtd: %{customdata:,.0f}<br>Perc: %{y:.1%}<extra></extra>"),
+    customdata = ~n
+  ) %>%
+    layout(
+      separators = ",.",
+      xaxis = list(
+        title = "",
+        tickfont = list(color = text_color),
+        gridcolor = grid_color
+      ),
+      yaxis = list(
+        title = "Percentual",
+        tickformat = ".0%",
+        tickfont = list(color = text_color),
+        gridcolor = grid_color
+      ),
+      paper_bgcolor = 'rgba(0,0,0,0)',
+      plot_bgcolor = 'rgba(0,0,0,0)',
+      margin = list(l = 50, r = 20, t = 20, b = 50)
+    ) %>%
+    config(displayModeBar = FALSE)
+}
